@@ -47,7 +47,8 @@ class Forma:
         submit_btn = tk.Button(self.parent, text="Submit", command=lambda: self.handleSubmit(
             login = e_login.get(),
             password = e_password.get(),
-            age = e_age.get() if e_age else None
+            age = e_age.get() if e_age else None,
+            action = 'Login' if isLogin else 'Register'
         ))
         submit_btn.grid(column=0, row=row_offset, pady=10)
 
@@ -58,11 +59,14 @@ class Forma:
         )
         toggle_btn.grid(column=1, row=row_offset)
 
-    def handleSubmit(self, login, password, age=None):
+    def handleSubmit(self, login, password, action, age=None):
+        
         data = {
           "login": f"{login}",
-          "password": f"{password}"
+          "password": f"{password}",
+          "action": f"{action}"
         }
+
         if age is not None:
             data["age"] = age
 

@@ -1,4 +1,5 @@
-import socket, pyodbc, jsonpickle
+import socket, pyodbc, jsonpickle, json
+from dataclasses import dataclass
 
 PATH = '127.0.0.1'
 PORT = 12345
@@ -15,15 +16,35 @@ try:
 except ConnectionError:
    print("Client can't connect to server")
 
+@dataclass
+class User:
+   login: str
+   password: str
+   age: int
+   action: str
+
+
+buffer = ""
+
 while True:
    try:
     data = conn.recv(1024)
     if not data:
        print("Server closinng...")
        break
-    print(data)
-    decoding_data = data.decode()
-    print(decoding_data)
+    buffer += data.decode()
+    try:
+       parsed = json.loads(buffer)
+       user = User (
+          login = parsed.get("login"),
+          password = parsed.get("password"),
+          age=int(parsed.get("age", 0)) if parsed.get("age") else 0,
+          action=parsed.get("action")
+       )
+       print("User: ")
+       print(user)
+    except Exception as e:
+       print(f"Error: {e}")
    except Exception as e:
       print(f"Error: {e}")
 
