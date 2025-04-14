@@ -15,6 +15,18 @@ try:
 except ConnectionError:
    print("Client can't connect to server")
 
+while True:
+   try:
+    data = conn.recv(1024)
+    if not data:
+       print("Server closinng...")
+       break
+    print(data)
+    decoding_data = data.decode()
+    print(decoding_data)
+   except Exception as e:
+      print(f"Error: {e}")
+
 
 
 server.close()
