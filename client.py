@@ -1,5 +1,6 @@
 import socket, json
 import tkinter as tk
+from tkinter import messagebox
 
 PATH = '127.0.0.1'
 PORT = 12345
@@ -16,10 +17,13 @@ class Forma:
     def __init__(self, parent_frame):
         self.parent = parent_frame
 
-    def createItems(self, isLogin=True):
-
+    def destroyWidgets(self):
         for widget in self.parent.winfo_children():
             widget.destroy()
+
+    def createItems(self, isLogin=True):
+
+        self.destroyWidgets()
 
         # Login
         l_login = tk.Label(self.parent, text="Enter login")
@@ -35,7 +39,8 @@ class Forma:
 
         row_offset = 4
         e_age = None
-
+       
+        # Register form
         if not isLogin:
             l_age = tk.Label(self.parent, text="Enter age")
             l_age.grid(column=0, row=row_offset, columnspan=2, pady=5)
@@ -73,6 +78,32 @@ class Forma:
         json_data = json.dumps(data)
         print(f"Data to send: {json_data}")
         client.send(json_data.encode())
+        
+        # Accept response from server
+        try:
+            response_data = client.recv(1024).decode()
+            response = json.loads(response_data)
+            tk.messagebox.showinfo("Server Resp: ", response.get("message", "No message"))
+            self.destroyWidgets()
+            if response.get("status") == "admin":
+                print("You are admin!")
+            else:
+                print("You are user")
+                self.userPanel()
+        except Exception as e:
+            print(f"Error: {e}")
+
+    def handleStatusTest(self, numbe_test):
+        if numbe_test == 1:
+            self.destroyWidgets()
+            root.title("Test status code 100")
+            tk.Label(text="Status code 100 test", font='Arial 12').grid(row=1, column=1)
+
+
+
+    def userPanel(self):
+        test_1 = tk.Button(self.parent, text="Status code 100", command=lambda:self.handleStatusTest(1))
+        test_1.grid(column=0, row=0, pady=10)
 
 
 forma = Forma(fm)
