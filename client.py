@@ -9,15 +9,15 @@ client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect((PATH, PORT))
 
 root = tk.Tk()
-root.geometry("400x250")
-root.title("Register/Login")
+root.geometry("400x300")
+root.title("Login/Register")
 
 fm = tk.Frame(root)
 fm.place(relx=0.5, rely=0.5, anchor='center')
 
 class Forma:
-    def __init__(self, parent_frame):
-        self.parent = parent_frame
+    def __init__(self, parent):
+        self.parent = parent
 
     def destroyWidgets(self):
         for widget in self.parent.winfo_children():
@@ -25,96 +25,82 @@ class Forma:
 
     def createItems(self, isLogin=True):
         self.destroyWidgets()
+        tk.Label(self.parent, text="Login").grid(row=0, column=0, columnspan=2)
+        login = tk.Entry(self.parent)
+        login.grid(row=1, column=0, columnspan=2)
 
-        # Login
-        l_login = tk.Label(self.parent, text="Enter login")
-        l_login.grid(column=0, row=0, columnspan=2, pady=5)
-        e_login = tk.Entry(self.parent)
-        e_login.grid(column=0, row=1, columnspan=2, pady=5)
+        tk.Label(self.parent, text="Password").grid(row=2, column=0, columnspan=2)
+        password = tk.Entry(self.parent, show='*')
+        password.grid(row=3, column=0, columnspan=2)
 
-        # Password
-        l_password = tk.Label(self.parent, text="Enter password")
-        l_password.grid(column=0, row=2, columnspan=2, pady=5)
-        e_password = tk.Entry(self.parent, show="*")
-        e_password.grid(column=0, row=3, columnspan=2, pady=5)
-
-        row_offset = 4
-        e_age = None
-
-        # Register form
+        age = None
         if not isLogin:
-            l_age = tk.Label(self.parent, text="Enter age")
-            l_age.grid(column=0, row=row_offset, columnspan=2, pady=5)
-            e_age = tk.Entry(self.parent)
-            e_age.grid(column=0, row=row_offset+1, columnspan=2, pady=5)
-            row_offset += 2
+            tk.Label(self.parent, text="Age").grid(row=4, column=0, columnspan=2)
+            age = tk.Entry(self.parent)
+            age.grid(row=5, column=0, columnspan=2)
 
-        # Buttons
-        submit_btn = tk.Button(self.parent, text="Submit", command=lambda: self.handleSubmit(
-            login = e_login.get(),
-            password = e_password.get(),
-            age = e_age.get() if e_age else None,
-            action = 'Login' if isLogin else 'Register'
-        ))
-        submit_btn.grid(column=0, row=row_offset, pady=10)
-
-        toggle_btn = tk.Button(
-            self.parent,
-            text="Register" if isLogin else "Login",
-            command=lambda: self.createItems(not isLogin)
-        )
-        toggle_btn.grid(column=1, row=row_offset)
-
-    def handleSubmit(self, login, password, action, age=None):
-        if not login or not password:
-            tk.messagebox.showerror("Error", "Login and password required")
-            return
-
-        data = {
-            "login": login,
-            "password": password,
-            "action": action
-        }
-
-        if age is not None:
-            data["age"] = age
-
-        json_data = json.dumps(data)
-        client.send(json_data.encode())
-
-        try:
-            response_data = client.recv(1024).decode()
-            response = json.loads(response_data)
-            tk.messagebox.showinfo("Server Resp:", response.get("message", "No message"))
-            self.destroyWidgets()
-            if response.get("status") == "admin":
-                print("You are admin!")
-            else:
-                print("You are user")
+        def submit():
+            data = {
+                "login": login.get(),
+                "password": password.get(),
+                "action": "Login" if isLogin else "Register"
+            }
+            if age: data["age"] = age.get()
+            client.send(json.dumps(data).encode())
+            response = json.loads(client.recv(4096).decode())
+            messagebox.showinfo("Info", response.get("message"))
+            if response.get("status") in ["success", "admin"]:
                 self.userPanel()
-        except Exception as e:
-            print(f"Error: {e}")
 
-    def handleStatusTest(self, numbe_test):
-        if numbe_test == 1:
-            self.destroyWidgets()
-            root.title("Test status code 100")
-            tk.Label(text="Status code 100 test", font='Arial 12').grid(row=1, column=1)
-            client.send("100".encode())
-            client_data = client.recv(1024).decode()
-            response = json.loads(client_data)
-            print(response)
+        tk.Button(self.parent, text="Submit", command=submit).grid(row=6, column=0)
+        tk.Button(self.parent, text="Switch", command=lambda: self.createItems(not isLogin)).grid(row=6, column=1)
 
     def userPanel(self):
-        test_1 = tk.Button(self.parent, text="Status code 100", command=lambda:self.handleStatusTest(1))
-        test_1.grid(column=0, row=0, pady=10)
+        self.destroyWidgets()
+        tk.Button(self.parent, text="Start Test", command=self.startTest).pack()
+
+    def startTest(self):
+        self.destroyWidgets()
+        client.send(json.dumps({"action": "startTest"}).encode())
+        resp = json.loads(client.recv(8192).decode())
+        self.questions = resp["questions"]
+        self.answers = resp["answers"]
+        self.index = 0
+        self.userAnswers = {}
+        self.renderQuestion()
+
+    def renderQuestion(self):
+        self.destroyWidgets()
+        if self.index >= len(self.questions):
+            return self.finishTest()
+
+        q = self.questions[self.index]
+        tk.Label(self.parent, text=q["QuestionText"], wraplength=350).pack(pady=5)
+        self.ans_var = tk.IntVar()
+
+        for a in self.answers[str(q["QuestionId"])]:
+            tk.Radiobutton(self.parent, text=a["AnswerText"], variable=self.ans_var, value=a["AnswerId"]).pack(anchor="w")
+
+        tk.Button(self.parent, text="Next", command=self.nextQuestion).pack(pady=5)
+
+    def nextQuestion(self):
+        self.userAnswers[self.questions[self.index]["QuestionId"]] = self.ans_var.get()
+        self.index += 1
+        self.renderQuestion()
+
+    def finishTest(self):
+        client.send(json.dumps({"action": "submitTest", "answers": self.userAnswers}).encode())
+        result = json.loads(client.recv(4096).decode())
+
+        if result.get("status") == "ok" and "score" in result:
+           messagebox.showinfo("Result", f"Score: {result['score']}%")
+        else:
+           messagebox.showerror("Error", result.get("message", "Something went wrong"))
+
+        self.userPanel()
 
 forma = Forma(fm)
-forma.createItems(isLogin=True)
+forma.createItems()
 
-def on_closing():
-    client.close()
-    root.destroy()
-
-root.protocol("WM_DELETE_WINDOW", on_closing)
+root.protocol("WM_DELETE_WINDOW", lambda: (client.close(), root.destroy()))
 root.mainloop()

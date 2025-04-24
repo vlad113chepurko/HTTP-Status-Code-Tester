@@ -1,14 +1,11 @@
 import socket, pyodbc, json
 from dataclasses import dataclass
 
-# config
 PATH = '127.0.0.1'
 PORT = 12345
 
 server = 'localhost'
 database = 'TestsBase'
-username = ''
-password = ''
 dsn = f'DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={server};DATABASE={database};Trusted_Connection=yes;'
 
 @dataclass
@@ -30,56 +27,73 @@ buffer = ""
 
 while True:
     try:
-        data = conn.recv(1024)
+        data = conn.recv(4096)
         if not data:
             print("Client disconnected. Closing server...")
             break
 
         buffer += data.decode()
 
-        if buffer.strip() == "100":
-            response = {"status": "info", "message": "Received status 100"}
-            conn.sendall(json.dumps(response).encode())
-            buffer = ""
-            continue
-
         try:
             parsed = json.loads(buffer)
             buffer = ""
 
-            user = User(
-                login=parsed.get("login"),
-                password=parsed.get("password"),
-                age=int(parsed.get("age", 0)) if parsed.get("age") else 0,
-                action=parsed.get("action")
-            )
-
-            print(f"Received user: {user}")
-
             conn_bd = pyodbc.connect(dsn)
             cursor = conn_bd.cursor()
 
-            response = {}
-
-            if user.action == 'Register':
+            if parsed.get("action") == "Register":
                 cursor.execute("INSERT INTO Users ([Login], [Password], [Age]) VALUES (?, ?, ?)",
-                               (user.login, user.password, user.age))
+                               (parsed["login"], parsed["password"], int(parsed.get("age", 0))))
                 conn_bd.commit()
-                response = {"status": "success", "message": "User was inserted into database!"}
+                conn.sendall(json.dumps({"status": "success", "message": "User registered!"}).encode())
 
-            elif user.action == 'Login':
-                if user.login == 'admin' and user.password == 'admin':
-                    response = {"status": "admin", "message": "You are admin!"}
+            elif parsed.get("action") == "Login":
+                if parsed["login"] == "admin" and parsed["password"] == "admin":
+                    conn.sendall(json.dumps({"status": "admin", "message": "You are admin!"}).encode())
                 else:
                     cursor.execute("SELECT * FROM Users WHERE [Login] = ? AND [Password] = ?",
-                                   (user.login, user.password))
+                                   (parsed["login"], parsed["password"]))
                     result = cursor.fetchone()
                     if result:
-                        response = {"status": "success", "message": "You were logged in!"}
+                        conn.sendall(json.dumps({"status": "success", "message": "Logged in!"}).encode())
                     else:
-                        response = {"status": "error", "message": "Login or password is incorrect"}
+                        conn.sendall(json.dumps({"status": "error", "message": "Login or password incorrect"}).encode())
 
-            conn.sendall(json.dumps(response).encode())
+            elif parsed.get("action") == "startTest":
+                cursor.execute("SELECT * FROM Questions")
+                questions = [{"QuestionId": row.QuestionId, "QuestionText": row.QuestionText} for row in cursor.fetchall()]
+
+                answers = {}
+                for q in questions:
+                    cursor.execute("SELECT * FROM Answers WHERE QuestionId = ?", (q["QuestionId"],))
+                    answers[str(q["QuestionId"])] = [
+                        {"AnswerId": row.AnswerId, "AnswerText": row.AnswerText, "isCorrect": bool(row.isCorrect)}
+                        for row in cursor.fetchall()
+                    ]
+
+                conn.sendall(json.dumps({"status": "ok", "questions": questions, "answers": answers}).encode())
+
+            elif parsed.get("action") == "submitTest":
+                answers = parsed.get("answers", {})
+                correct_count = 0
+
+                for qid_str, aid in answers.items():
+                    cursor.execute("SELECT isCorrect FROM Answers WHERE AnswerId = ?", (aid,))
+                    row = cursor.fetchone()
+                    is_correct = row.isCorrect if row else False
+
+                    correct_count += int(is_correct)
+                    cursor.execute("INSERT INTO AnswerLogs (AnswerId, AnswersStatus) VALUES (?, ?)", (aid, is_correct))
+
+                total = len(answers)
+                procent = int((correct_count / total) * 100) if total > 0 else 0
+
+                userId = 1
+                testId = 1
+                cursor.execute("INSERT INTO Results (UserId, TestId, ResultDate, ProcentOfCorrectAnswers) VALUES (?, ?, GETDATE(), ?)",
+                               (userId, testId, procent))
+                conn_bd.commit()
+                conn.sendall(json.dumps({"status": "ok", "score": procent}).encode())
 
             cursor.close()
             conn_bd.close()
