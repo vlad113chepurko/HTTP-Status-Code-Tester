@@ -5,10 +5,12 @@ from tkinter import messagebox
 PATH = '127.0.0.1'
 PORT = 12345
 
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect((PATH, PORT))
+
 root = tk.Tk()
 root.geometry("400x250")
 root.title("Register/Login")
-
 
 fm = tk.Frame(root)
 fm.place(relx=0.5, rely=0.5, anchor='center')
@@ -22,7 +24,6 @@ class Forma:
             widget.destroy()
 
     def createItems(self, isLogin=True):
-
         self.destroyWidgets()
 
         # Login
@@ -39,7 +40,7 @@ class Forma:
 
         row_offset = 4
         e_age = None
-       
+
         # Register form
         if not isLogin:
             l_age = tk.Label(self.parent, text="Enter age")
@@ -65,25 +66,26 @@ class Forma:
         toggle_btn.grid(column=1, row=row_offset)
 
     def handleSubmit(self, login, password, action, age=None):
-        
+        if not login or not password:
+            tk.messagebox.showerror("Error", "Login and password required")
+            return
+
         data = {
-          "login": f"{login}",
-          "password": f"{password}",
-          "action": f"{action}"
+            "login": login,
+            "password": password,
+            "action": action
         }
 
         if age is not None:
             data["age"] = age
 
         json_data = json.dumps(data)
-        print(f"Data to send: {json_data}")
         client.send(json_data.encode())
-        
-        # Accept response from server
+
         try:
             response_data = client.recv(1024).decode()
             response = json.loads(response_data)
-            tk.messagebox.showinfo("Server Resp: ", response.get("message", "No message"))
+            tk.messagebox.showinfo("Server Resp:", response.get("message", "No message"))
             self.destroyWidgets()
             if response.get("status") == "admin":
                 print("You are admin!")
@@ -98,19 +100,21 @@ class Forma:
             self.destroyWidgets()
             root.title("Test status code 100")
             tk.Label(text="Status code 100 test", font='Arial 12').grid(row=1, column=1)
-
-
+            client.send("100".encode())
+            client_data = client.recv(1024).decode()
+            response = json.loads(client_data)
+            print(response)
 
     def userPanel(self):
         test_1 = tk.Button(self.parent, text="Status code 100", command=lambda:self.handleStatusTest(1))
         test_1.grid(column=0, row=0, pady=10)
 
-
 forma = Forma(fm)
 forma.createItems(isLogin=True)
 
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect((PATH, PORT))
+def on_closing():
+    client.close()
+    root.destroy()
 
+root.protocol("WM_DELETE_WINDOW", on_closing)
 root.mainloop()
-client.close()
